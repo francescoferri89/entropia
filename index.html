@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordine e Disordine - Simulazione Completa</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+        }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: var(--bg-color); color: #333; display: flex; flex-direction: column; align-items: center; padding: 10px; margin: 0; }
+        header { text-align: center; margin-bottom: 15px; }
+        h2 { margin: 0; color: #222; font-size: 1.8rem;}
+        h3.subtitle { margin: 5px 0 0 0; color: #666; font-weight: normal; font-size: 1rem; }
+
+        /* LAYOUT PRINCIPALE */
+        .main-layout { 
+            display: flex; 
+            flex-direction: row; 
+            gap: 15px; 
+            align-items: flex-start; 
+            justify-content: center; 
+            width: 100%;
+            max-width: 1400px;
+            flex-wrap: wrap; 
+        }
+
+        /* PANNELLI */
+        .panel { background: var(--panel-bg); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        
+        /* 1. Colonna Controlli */
+        .controls-column { flex: 0 0 260px; min-width: 260px; display: flex; flex-direction: column; gap: 15px;}
+        
+        /* 2. Colonna Griglia */
+        .grid-column { flex: 0 0 auto; display: flex; justify-content: center; align-items: center;}
+        canvas#gridCanvas { background: #fff; cursor: crosshair; display: block; border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
+        
+        /* 3. Colonna Grafico */
+        .chart-column { flex: 1 1 500px; min-width: 400px; height: 480px; display: flex; flex-direction: column;}
+        .chart-wrapper { flex-grow: 1; position: relative; }
+
+        /* ELEMENTI DI CONTROLLO */
+        .control-group { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .control-group:last-child { border-bottom: none; }
+        label.slider-label { display: block; font-weight: 600; font-size: 0.9em; margin-bottom: 5px;}
+        input[type=range] { width: 100%; cursor: pointer;}
+
+        /* Toggle Switches */
+        .toggle-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 0.9em;}
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; margin-left: 10px;}
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary-color); }
+        input:checked + .slider:before { transform: translateX(18px); }
+        
+        /* Pulsanti */
+        .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+        button { padding: 10px; flex: 1; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; transition: 0.2s; font-size: 0.85em; color: white;}
+        button:hover { filter: brightness(90%); }
+        .btn-fwd { background-color: #2e7d32; }
+        .btn-back { background-color: #f57c00; }
+        .btn-reset { background-color: #c62828; }
+        
+        /* Statistiche */
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 0.85em; }
+        .ring-legend { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); }
+        .microstate-box { background: #e3f2fd; padding: 8px; border-radius: 4px; margin-top: 5px; word-break: break-all; font-family: 'Roboto Mono', monospace; font-size: 0.8em; border-left: 3px solid var(--primary-color); }
+        .helper-text { font-size: 0.75em; color: #777; margin-top: 5px; text-align: center; font-style: italic;}
+        
+        /* Nuovi Stili per i Titoletti */
+        .section-title { margin-top: 15px; margin-bottom: 5px; font-weight: 700; font-size: 0.8em; color: #555; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #eee; padding-bottom: 2px;}
+
+        @media (max-width: 900px) {
+             .main-layout { flex-direction: column; align-items: center; }
+             .controls-column, .grid-column, .chart-column { width: 100%; max-width: 450px; flex: none; }
+             .chart-column { height: 350px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h2>Ordine e disordine: cosa significa?</h2>
+        <h3 class="subtitle">IIS Maxwell, classe 4BLS 2026/27</h3>
+    </header>
+
+    <div class="main-layout">
+        
+        <div class="panel controls-column">
+            
+            <div class="control-group">
+                 <label class="slider-label">Prob. di restare (p): <span id="pVal">0.2</span></label>
+                 <input type="range" id="probSlider" min="0" max="1" step="0.05" value="0.2">
+            </div>
+
+            <div class="control-group">
+                <div class="toggle-container">
+                    <span>Bordi Periodici</span>
+                    <label class="switch">
+                        <input type="checkbox" id="pbcToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="helper-text">Se attivo, le pedine attraversano i bordi.</div>
+            </div>
+            
+            <div id="statsPanel"></div>
+
+             <div class="btn-group">
+                <button class="btn-back" onclick="stepBack()">Indietro</button>
+                <button class="btn-fwd" onclick="stepForward()">Avanti</button>
+                <button class="btn-reset" onclick="resetGrid()">Reset</button>
+            </div>
+             <div class="helper-text">Clicca sulla griglia per aggiungere pedine allo Step 0.</div>
+        </div>
+
+        <div class="panel grid-column">
+             <canvas id="gridCanvas" width="420" height="420"></canvas>
+        </div>
+
+        <div class="panel chart-column">
+             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <strong>Evoluzione Temporale</strong>
+                <div class="toggle-container" style="margin-bottom:0;">
+                    <span style="margin-right: 10px; font-size: 0.9em;">Modo Grafico:</span>
+                    <span style="font-size: 0.8em; font-weight: bold; margin-right: 5px;">W</span>
+                     <label class="switch">
+                        <input type="checkbox" id="plotModeToggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span style="font-size: 0.8em; font-weight: bold; margin-left: 5px;">ln(W)</span>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                 <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // --- CONFIGURAZIONE ---
+    const gridSize = 7;
+    const cellSize = 60;
+    const canvas = document.getElementById('gridCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Stato
+    let particles = []; 
+    let historyStack = []; 
+    let probabilityStay = 0.2;
+    let usePBC = false; 
+    let plotLogW = false; 
+    let stepCount = 0;
+    let wHistoryNumerical = []; 
+
+    const ringColors = ['#FFCDD2', '#BBDEFB', '#C8E6C9', '#FFF9C4']; 
+    const ringNames = ['Centro', 'Cerchia 2', 'Cerchia 3', 'Cerchia 4'];
+
+    // --- EVENT LISTENERS ---
+    canvas.addEventListener('mousedown', addParticleHandler);
+    
+    document.getElementById('probSlider').addEventListener('input', (e) => {
+        probabilityStay = parseFloat(e.target.value);
+        document.getElementById('pVal').innerText = probabilityStay;
+    });
+
+    document.getElementById('pbcToggle').addEventListener('change', (e) => {
+        usePBC = e.target.checked;
+    });
+
+    document.getElementById('plotModeToggle').addEventListener('change', (e) => {
+        plotLogW = e.target.checked;
+        updateChartMode(); 
+    });
+
+    window.stepForward = stepForward;
+    window.stepBack = stepBack;
+    window.resetGrid = resetGrid;
+
+    let trendChart;
+    initChart(); 
+    updateEverything(); 
+
+    // --- LOGICA CORE ---
+    function getRingIndex(x, y) {
+        const cx = x - 3;
+        const cy = y - 3;
+        return Math.max(Math.abs(cx), Math.abs(cy));
+    }
+
+    function addParticleHandler(e) {
+        if (stepCount > 0) {
+             canvas.style.borderColor = 'red';
+             setTimeout(() => canvas.style.borderColor = '#ddd', 500);
+             return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / cellSize);
+        const y = Math.floor((e.clientY - rect.top) / cellSize);
+        if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) {
+            particles.push({x: x, y: y});
+            updateEverything();
+        }
+    }
+
+    function stepForward() {
+        historyStack.push({
+            particles: JSON.parse(JSON.stringify(particles)),
+            stepCount: stepCount,
+            wVal: wHistoryNumerical[stepCount]
+        });
+        if (historyStack.length > 200) historyStack.shift(); 
+
+        let newParticles = [];
+        particles.forEach(p => {
+            if (Math.random() < probabilityStay) {
+                newParticles.push({...p});
+            } else {
+                const moves = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+                const move = moves[Math.floor(Math.random() * moves.length)];
+                let nx, ny;
+
+                if (usePBC) {
+                    nx = (p.x + move.dx + gridSize) % gridSize;
+                    ny = (p.y + move.dy + gridSize) % gridSize;
+                    newParticles.push({x: nx, y: ny});
+                } else {
+                    nx = p.x + move.dx;
+                    ny = p.y + move.dy;
+                    if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) {
+                        newParticles.push({...p}); 
+                    } else {
+                        newParticles.push({x: nx, y: ny});
+                    }
+                }
+            }
+        });
+        particles = newParticles;
+        stepCount++;
+        updateEverything();
+    }
+
+    function stepBack() {
+        if (historyStack.length > 0) {
+            const prevState = historyStack.pop();
+            particles = prevState.particles;
+            stepCount = prevState.stepCount;
+            updateEverything();
+        }
+    }
+
+    function resetGrid() {
+        particles = [];
+        historyStack = [];
+        stepCount = 0;
+        wHistoryNumerical = [];
+        trendChart.data.labels = [];
+        trendChart.data.datasets[0].data = [];
+        updateEverything();
+    }
+
+    function updateEverything() {
+        drawGrid();
+        const currentWBigInt = calculateWBigInt();
+        updateStatsPanel(currentWBigInt);
+        updateChartData(currentWBigInt);
+    }
+
+    // --- GRAFICA E CHART ---
+    function drawGrid() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let y = 0; y < gridSize; y++) {
+            for (let x = 0; x < gridSize; x++) {
+                ctx.fillStyle = ringColors[getRingIndex(x, y)];
+                ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+            }
+        }
+        let map = {};
+        particles.forEach(p => map[p.x + ',' + p.y] = (map[p.x + ',' + p.y] || 0) + 1);
+        ctx.fillStyle = '#333'; ctx.font = 'bold 18px Roboto Mono'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (let key in map) {
+            let [x, y] = key.split(',').map(Number);
+            ctx.beginPath();
+            ctx.arc(x*cellSize+cellSize/2, y*cellSize+cellSize/2, cellSize/3.2, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x*cellSize+cellSize/2 - 2, y*cellSize+cellSize/2 - 2, cellSize/3.2, 0, Math.PI*2);
+            ctx.fillStyle = '#424242'; ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.fillText(map[key], x*cellSize+cellSize/2 - 2, y*cellSize+cellSize/2 - 2);
+        }
+    }
+
+    function initChart() {
+        const ctxChart = document.getElementById('trendChart').getContext('2d');
+        trendChart = new Chart(ctxChart, {
+            type: 'line',
+            data: {
+                labels: [], 
+                datasets: [{
+                    label: 'W',
+                    data: [], 
+                    borderColor: '#1976D2',
+                    backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 0 },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Step' },
+                        grid: { color: 'rgba(0,0,0,0.05)'}
+                    },
+                    y: {
+                        type: 'linear', 
+                        title: { display: true, text: 'W (Scala Lineare)' },
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.05)'},
+                        ticks: {
+                            callback: function(value) {
+                                if (value > 10000) return value.toExponential(1);
+                                return value;
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let val = context.raw;
+                                if(plotLogW) {
+                                     return `ln(W) ≈ ${val.toFixed(3)}`;
+                                } else {
+                                     return (val > 10000) ? val.toExponential(2) : val.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateChartMode() {
+        if (plotLogW) {
+            trendChart.options.scales.y.type = 'linear';
+            trendChart.options.scales.y.title.text = 'ln(W)';
+            trendChart.options.scales.y.ticks.callback = undefined; 
+        } else {
+            trendChart.options.scales.y.type = 'linear';
+            trendChart.options.scales.y.title.text = 'W (Scala Lineare)';
+            trendChart.options.scales.y.ticks.callback = function(value) {
+                if (value > 10000) return value.toExponential(1);
+                return value;
+            };
+        }
+
+        let newData = [];
+        for(let i = 0; i <= stepCount && i < wHistoryNumerical.length; i++) {
+            let wVal = wHistoryNumerical[i];
+            if (plotLogW) {
+                 newData.push(wVal > 0 ? Math.log(wVal) : 0);
+            } else {
+                 newData.push(wVal);
+            }
+        }
+        trendChart.data.datasets[0].data = newData;
+        trendChart.update();
+    }
+
+    function updateChartData(currentWBigInt) {
+        const wNumber = Number(currentWBigInt); 
+        wHistoryNumerical = wHistoryNumerical.slice(0, stepCount); 
+        wHistoryNumerical.push(wNumber); 
+        trendChart.data.labels = trendChart.data.labels.slice(0, stepCount);
+        trendChart.data.labels.push(stepCount);
+
+        let valueToPlot;
+        if (plotLogW) {
+            valueToPlot = (wNumber > 0) ? Math.log(wNumber) : 0;
+        } else {
+            valueToPlot = wNumber;
+        }
+
+        trendChart.data.datasets[0].data = trendChart.data.datasets[0].data.slice(0, stepCount);
+        trendChart.data.datasets[0].data.push(valueToPlot);
+        trendChart.update('none'); 
+    }
+
+    // --- MATEMATICA ---
+    function factorial(n) {
+        if (n === 0 || n === 1) return 1n;
+        let result = 1n;
+        for (let i = 2n; i <= BigInt(n); i++) result *= i;
+        return result;
+    }
+
+    function calculateWBigInt() {
+        let counts = [0, 0, 0, 0];
+        particles.forEach(p => counts[getRingIndex(p.x, p.y)]++);
+        
+        const totalN = particles.length;
+        if (totalN === 0) return 1n;
+
+        // Numero di celle per ogni cerchia (g_i)
+        // Centro (1), Cerchia2 (8), Cerchia3 (16), Cerchia4 (24)
+        const cellsPerRing = [1n, 8n, 16n, 24n];
+
+        // 1. Calcolo del termine multinomiale: N! / (n1! * n2! * ...)
+        let denominator = 1n;
+        counts.forEach(c => denominator *= factorial(c));
+        const multinomialTerm = factorial(totalN) / denominator;
+
+        // 2. Calcolo del termine di volume: g1^n1 * g2^n2 * ...
+        let volumeFactor = 1n;
+        counts.forEach((count, index) => {
+            if (count > 0) {
+                // Elevamento a potenza BigInt
+                volumeFactor *= (cellsPerRing[index] ** BigInt(count));
+            }
+        });
+
+        // W totale
+        return multinomialTerm * volumeFactor;
+    }
+
+    function updateStatsPanel(W) {
+        let counts = [0, 0, 0, 0];
+        particles.forEach(p => counts[getRingIndex(p.x, p.y)]++);
+        
+        let statsHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:0.9em;">
+            <span>Step: <strong>${stepCount}</strong></span> 
+            <span>Pedine (N): <strong>${particles.length}</strong></span>
+        </div>`;
+
+        // 1. TITOLETTO MICROSTATO
+        statsHtml += `<div class="section-title">Microstato</div>`;
+
+        statsHtml += `<div style="background: #fafafa; padding: 5px; border-radius: 4px;">`;
+        counts.forEach((c, i) => {
+            statsHtml += `
+            <div class="stat-row">
+                <span><span class="ring-legend" style="background:${ringColors[i]}"></span>${ringNames[i]}</span>
+                <strong>${c}</strong>
+            </div>`;
+        });
+        statsHtml += `</div>`;
+
+        let wString = W.toString();
+        if (wString.length > 8) {
+            let exponent = wString.length - 1;
+            let mantissa = wString.substring(0, 5);
+            wString = `${mantissa[0]}.${mantissa.substring(1)}e+${exponent}`;
+        }
+
+        // 2. TITOLETTO MOLTEPLICITÀ
+        statsHtml += `<div class="section-title" style="margin-top:15px;">Molteplicità del microstato</div>`;
+
+        statsHtml += `<div class="microstate-box">
+            W = ${wString}
+        </div>`;
+
+        document.getElementById('statsPanel').innerHTML = statsHtml;
+    }
+
+});
+</script>
+
+</body>
+</html>
